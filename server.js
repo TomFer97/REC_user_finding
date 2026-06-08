@@ -184,7 +184,31 @@ app.post('/api/osm-search', async (req, res) => {
     if (!geo) return res.status(400).json({ error: 'Body JSON con proprietà geojson obbligatoria' });
 
     // For now, return mock data to avoid Overpass rate-limiting
-    const mockData = require('./webapp/data/osm-mock.json');
+    function geojsonPolygonToOverpassPoly(geojson) {
+      const ring = geojson.type === 'Polygon'
+        ? geojson.coordinates[0]
+        : geojson.geometry.coordinates[0];
+
+      return ring
+        .map(([lon, lat]) => `${lat} ${lon}`)
+        .join(' ');
+    }
+
+    function buildNonResidentialOverpassQuery(poly) {
+      return `
+    [out:json][timeout:60];
+    (
+      nwr["shop"](poly:"${poly}");
+      nwr["craft"](poly:"${poly}");
+      nwr["office"](poly:"${poly}");
+      nwr["tourism"](poly:"${poly}");
+      nwr["amenity"~"school|clinic|hospital|doctors|dentist|pharmacy|post_office|townhall|library|community_centre|restaurant|bar|cafe"](poly:"${poly}");
+      nwr["building"~"commercial|industrial|retail|office|warehouse|supermarket"](poly:"${poly}");
+      nwr["landuse"="industrial"](poly:"${poly}");
+    );
+    out center tags;
+    `;
+    }
     
     const poiFeatures = (mockData.elements || []).map(el => {
       if (el.type === 'node') {
