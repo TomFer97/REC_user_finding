@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mappa Cabine Primarie - Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="sidebar">
+    <div id="appHeader">
+      <h1>CER Vaprioenergy</h1>
+      <div class="subtitle">Mappa per coinvolgimento membri della comunità energetica</div>
+    </div>
+    <h2>Cabine primarie</h2>
+    <ul id="cabinsList"></ul>
+    <div id="controls">
+      <label for="radiusInput">Raggio (m):</label>
+      <input id="radiusInput" type="number" value="500" min="50" step="50" style="width:100%" />
+      <button id="searchPodBtn" style="margin-top:8px;width:100%">Cerca POD intorno al centro mappa</button>
+    </div>
+    <div style="margin-top:12px">
+      <strong>Seleziona AC rapida</strong>
+      <div style="display:flex;flex-direction:column;margin-top:6px">
+        <button class="ac-btn" data-code="AC001E01397">AC001E01397</button>
+        <button class="ac-btn" data-code="AC001E01398">AC001E01398</button>
+        <button class="ac-btn" data-code="AC001E01364">AC001E01364</button>
+      </div>
+    </div>
+    <div id="results" style="margin-top:12px">
+      <h3>Risultati OSM</h3>
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <select id="exportPreset" style="padding:6px">
+          <option value="minimal">Minimal (nome, categoria, id)</option>
+          <option value="withCategory" selected>Con categoria (consigliato)</option>
+          <option value="all">Tutte le colonne</option>
+        </select>
+        <button id="exportCsvBtn">Esporta CSV</button>
+        <button id="exportPdfBtn">Esporta PDF</button>
+      </div>
+      <div id="columnsSelector" style="margin-bottom:8px">
+        <strong>Seleziona colonne da esportare</strong>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+          <label><input type="checkbox" data-col="name" checked> Nome</label>
+          <label><input type="checkbox" data-col="category_macro" checked> Macro categoria</label>
+          <label><input type="checkbox" data-col="category_sub" checked> Sotto-categoria</label>
+          <label><input type="checkbox" data-col="shop"> Shop</label>
+          <label><input type="checkbox" data-col="craft"> Craft</label>
+          <label><input type="checkbox" data-col="office"> Office</label>
+          <label><input type="checkbox" data-col="amenity"> Amenity</label>
+          <label><input type="checkbox" data-col="phone"> Phone</label>
+          <label><input type="checkbox" data-col="website"> Website</label>
+          <label><input type="checkbox" data-col="addr:street"> Via</label>
+          <label><input type="checkbox" data-col="addr:city"> Città</label>
+          <label><input type="checkbox" data-col="_osm_type" checked> OSM Type</label>
+          <label><input type="checkbox" data-col="_osm_id" checked> OSM ID</label>
+        </div>
+      </div>
+      <div id="resultsList" style="max-height:220px;overflow:auto"></div>
+    </div>
+    <div id="info">Seleziona una cabina per limitare l'analisi.</div>
+  </div>
+  <div id="appFooter">
+    <img id="ceahLogo" src="images/ceah_logo.png" alt="Citizen Energy Advisory Hub" />
+    <div class="credits">
+      <div>Strumento realizzato con il supporto di Citizen Energy Advisory Hub</div>
+      <div>Esperto tecnico: Tommaso Ferrucci</div>
+    </div>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

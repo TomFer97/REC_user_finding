@@ -1,0 +1,44 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 1,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [12.496366, 41.902782]
+      },
+      "properties": {
+        "COD_AC": "AC001E01397",
+        "NOME": "Cabina AC001E01397",
+        "COMUNE": "Roma"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 2,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [12.496, 41.903]
+      },
+      "properties": {
+        "COD_AC": "AC001E01398",
+        "NOME": "Cabina AC001E01398",
+        "COMUNE": "Roma"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 3,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [12.497, 41.902]
+      },
+      "properties": {
+        "COD_AC": "AC001E01364",
+        "NOME": "Cabina AC001E01364",
+        "COMUNE": "Roma"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","properties":{"name":"Cabina A","radius":500},"geometry":{"type":"Point","coordinates":[9.1900,45.4642]}},
+    {"type":"Feature","properties":{"name":"Cabina B","radius":800},"geometry":{"type":"Point","coordinates":[9.2005,45.4600]}}
+  ]
+}

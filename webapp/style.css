@@ -1,0 +1,31 @@
+html,body,#map{height:100%;margin:0;padding:0}
+#map{position:fixed;right:0;top:0;bottom:0;left:300px}
+#sidebar{position:fixed;left:0;top:0;bottom:0;width:300px;overflow:auto;padding:12px;background:#f7f7f7;border-right:1px solid #ddd}
+#cabinsList{list-style:none;padding:0;margin:8px 0}
+#cabinsList li{padding:6px;border-radius:4px;cursor:pointer}
+#cabinsList li:hover{background:#e6f0ff}
+#cabinsList li.active{background:#cfe4ff;font-weight:600}
+#info{margin-top:12px;color:#555;font-size:14px}
+
+:root{
+	--ceah-blue: #1a73e8;
+	--ceah-green: #7fb800;
+}
+
+#appHeader h1{margin:0;font-size:18px;color:var(--ceah-blue)}
+#appHeader .subtitle{font-size:12px;color:var(--ceah-green);margin-bottom:8px}
+
+#appFooter{position:fixed;left:0;right:0;bottom:0;height:56px;background:#fff;border-top:1px solid #eee;display:flex;align-items:center;gap:12px;padding:8px 12px;font-size:12px;color:#444}
+#appFooter .credits{display:flex;flex-direction:column}
+#appFooter img#ceahLogo{height:40px}
+
+/* highlight for building rooftops */
+.building-highlight{fill:#ffeb3b;fill-opacity:0.6;stroke:#d4a600;stroke-width:1}
+
+/* buttons / controls style using CEAH colors */
+button{background:#fff;border:1px solid var(--ceah-blue);color:var(--ceah-blue);padding:6px 8px;border-radius:4px;cursor:pointer}
+button:hover{background:var(--ceah-blue);color:#fff}
+select, input[type=number]{border:1px solid #ddd;padding:6px;border-radius:4px}
+label{color:var(--ceah-blue)}
+.ac-btn{background:#fff;border:1px solid var(--ceah-green);color:var(--ceah-green);padding:6px;margin-bottom:6px;border-radius:4px}
+.ac-btn:hover{background:var(--ceah-green);color:#fff}

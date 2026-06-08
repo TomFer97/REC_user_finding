@@ -1,0 +1,47 @@
+{
+  "elements": [
+    {
+      "type": "node",
+      "id": 1,
+      "lat": 41.9028,
+      "lon": 12.4964,
+      "tags": {
+        "name": "Panetteria La Romana",
+        "shop": "bakery",
+        "phone": "+39 06 1234567"
+      }
+    },
+    {
+      "type": "node",
+      "id": 2,
+      "lat": 41.9035,
+      "lon": 12.4970,
+      "tags": {
+        "name": "Macellerìa Rossi",
+        "shop": "butcher"
+      }
+    },
+    {
+      "type": "node",
+      "id": 3,
+      "lat": 41.9020,
+      "lon": 12.4950,
+      "tags": {
+        "name": "Scuola Elementare Mazzini",
+        "amenity": "school"
+      }
+    },
+    {
+      "type": "way",
+      "id": 100,
+      "center": {
+        "lat": 41.9022,
+        "lon": 12.4965
+      },
+      "tags": {
+        "name": "Officina Auto Service",
+        "craft": "car_repair"
+      }
+    }
+  ]
+}

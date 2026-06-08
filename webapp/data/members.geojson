@@ -1,0 +1,9 @@
+{
+  "type":"FeatureCollection",
+  "features":[
+  {"type":"Feature","properties":{"name":"Mario Rossi"},"geometry":{"type":"Point","coordinates":[12.496,41.902]}},
+  {"type":"Feature","properties":{"name":"Luigi Bianchi"},"geometry":{"type":"Point","coordinates":[12.497,41.903]}},
+  {"type":"Feature","properties":{"name":"Anna Verdi"},"geometry":{"type":"Point","coordinates":[12.495,41.904]}},
+  {"type":"Feature","properties":{"name":"Giulia Neri"},"geometry":{"type":"Point","coordinates":[12.498,41.901]}}
+  ]
+}
