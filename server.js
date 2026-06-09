@@ -3,15 +3,15 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
 
-// basic app setup
 const app = express();
 const port = process.env.PORT || 3000;
+const useMockOsm = String(process.env.USE_MOCK_OSM || '').toLowerCase() === 'true';
+const overpassUrl = process.env.OVERPASS_URL || 'https://overpass-api.de/api/interpreter';
+
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
-// serve static files from webapp (index.html, css, images, main.js)
+app.use(express.json({ limit: '4mb' }));
 app.use(express.static(path.join(__dirname, 'webapp')));
 
-// GSE services and allowed parameters
 const allowedServices = {
   ac_comuni_21: 'https://services.arcgisonline.com/arcgis/rest/services/governance/infrastructure_governance/FeatureServer/21',
   pod_ac_12: 'https://services.arcgisonline.com/arcgis/rest/services/governance/infrastructure_governance/FeatureServer/12',
@@ -26,7 +26,6 @@ const allowedParams = new Set([
   'returnCentroid', 'distance', 'units', 'returnDistinctValues', 'f'
 ]);
 
-// simple in-memory cache with TTL
 const cache = {};
 function cacheGet(key){
   const entry = cache[key];
@@ -41,73 +40,133 @@ function cacheSet(key, value, ttlMs){
   cache[key] = { value, expiry: Date.now() + ttlMs };
 }
 
-// process boxes with limited concurrency to avoid overloading Overpass
-// default 2 (faster) but can be overridden with env OVERPASS_CONCURRENCY
-const concurrency = parseInt(process.env.OVERPASS_CONCURRENCY) || 2;
-
-// geometry helpers used by simplifyCoords
-function getPerpDistance(point, start, end){
-  const x0 = point[0], y0 = point[1];
-  const x1 = start[0], y1 = start[1];
-  const x2 = end[0], y2 = end[1];
-  const dx = x2 - x1, dy = y2 - y1;
-  if(dx === 0 && dy === 0) return Math.hypot(x0 - x1, y0 - y1);
-  const t = ((x0 - x1) * dx + (y0 - y1) * dy) / (dx*dx + dy*dy);
-  const projx = x1 + t * dx;
-  const projy = y1 + t * dy;
-  return Math.hypot(x0 - projx, y0 - projy);
+function normalizeGeometry(input){
+  if(!input) return null;
+  if(input.type === 'Feature') return input.geometry;
+  if(input.type === 'Polygon' || input.type === 'MultiPolygon') return input;
+  return null;
 }
 
-function douglasPeucker(points, epsilon){
-  if(!Array.isArray(points) || points.length < 3) return points.slice();
-  const start = points[0];
-  const end = points[points.length - 1];
-  let index = 0;
-  let maxDist = 0;
-  for(let i=1;i<points.length-1;i++){
-    const d = getPerpDistance(points[i], start, end);
-    if(d > maxDist){ index = i; maxDist = d; }
-  }
-  if(maxDist > epsilon){
-    const left = douglasPeucker(points.slice(0, index+1), epsilon);
-    const right = douglasPeucker(points.slice(index), epsilon);
-    return left.slice(0, left.length-1).concat(right);
-  } else {
-    return [start, end];
-  }
+function getPolygonRings(geometry){
+  const geo = normalizeGeometry(geometry);
+  if(!geo) return [];
+  if(geo.type === 'Polygon') return [geo.coordinates[0]];
+  if(geo.type === 'MultiPolygon') return geo.coordinates.map(poly => poly[0]).filter(Boolean);
+  return [];
 }
 
-function simplifyCoords(coords, maxPoints=200){
-  if(!Array.isArray(coords) || coords.length <= maxPoints) return coords;
-  // coords are [lon,lat]
-  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-  coords.forEach(c=>{ if(c[0]<minx) minx=c[0]; if(c[1]<miny) miny=c[1]; if(c[0]>maxx) maxx=c[0]; if(c[1]>maxy) maxy=c[1]; });
-  const diag = Math.hypot(maxx-minx, maxy-miny) || 0.001;
-  // start with small epsilon relative to bbox diagonal, increase until pointcount <= maxPoints
-  let epsilon = diag / 500; // heuristic
-  let simplified = douglasPeucker(coords, epsilon);
-  let attempts = 0;
-  while(simplified.length > maxPoints && attempts < 6){
-    epsilon *= 2;
-    simplified = douglasPeucker(coords, epsilon);
-    attempts++;
-  }
-  // ensure closure
-  if(simplified.length > 2){
-    const first = simplified[0]; const last = simplified[simplified.length-1];
-    if(first[0] !== last[0] || first[1] !== last[1]) simplified.push([first[0], first[1]]);
-  }
-  return simplified;
+function ringToOverpassPoly(ring, maxPoints = 120){
+  if(!Array.isArray(ring) || ring.length < 4) return '';
+  const step = Math.max(1, Math.ceil(ring.length / maxPoints));
+  const sampled = ring.filter((_, idx) => idx % step === 0);
+  const first = sampled[0];
+  const last = sampled[sampled.length - 1];
+  if(first && last && (first[0] !== last[0] || first[1] !== last[1])) sampled.push(first);
+  return sampled
+    .map(([lon, lat]) => `${Number(lat).toFixed(7)} ${Number(lon).toFixed(7)}`)
+    .join(' ');
 }
 
-// Endpoint semplificato: restituisce tutte le cabine (GeoJSON)
+function buildNonResidentialQuery(poly){
+  return `[out:json][timeout:60];
+(
+  nwr["shop"](poly:"${poly}");
+  nwr["craft"](poly:"${poly}");
+  nwr["office"](poly:"${poly}");
+  nwr["tourism"](poly:"${poly}");
+  nwr["amenity"~"school|clinic|hospital|doctors|dentist|pharmacy|post_office|townhall|library|community_centre|restaurant|bar|cafe|fuel|bank|marketplace"](poly:"${poly}");
+  nwr["building"~"commercial|industrial|retail|office|warehouse|supermarket|school|hospital"](poly:"${poly}");
+  nwr["landuse"="industrial"](poly:"${poly}");
+);
+out center tags;`;
+}
+
+function overpassElementToFeature(el){
+  const tags = el.tags || {};
+  const lon = el.lon || (el.center && el.center.lon);
+  const lat = el.lat || (el.center && el.center.lat);
+  if(typeof lon !== 'number' || typeof lat !== 'number') return null;
+  return {
+    type: 'Feature',
+    id: `${el.type}/${el.id}`,
+    properties: Object.assign({}, tags, {
+      _osm_type: el.type,
+      _osm_id: el.id,
+      source: 'OpenStreetMap / Overpass',
+      confidence: estimateConfidence(tags)
+    }),
+    geometry: { type: 'Point', coordinates: [lon, lat] }
+  };
+}
+
+function estimateConfidence(tags){
+  if(tags.shop || tags.craft || tags.office || tags.amenity || tags.tourism) return 'alta';
+  if(tags.building === 'commercial' || tags.building === 'industrial' || tags.building === 'retail' || tags.building === 'office' || tags.building === 'warehouse') return 'media';
+  if(tags.landuse === 'industrial') return 'media';
+  return 'bassa';
+}
+
+async function runOverpassSearch(geometry){
+  const rings = getPolygonRings(geometry);
+  if(!rings.length) throw new Error('GeoJSON polygon or multipolygon required');
+
+  const allFeatures = [];
+  for(const ring of rings){
+    const poly = ringToOverpassPoly(ring);
+    if(!poly) continue;
+    const query = buildNonResidentialQuery(poly);
+    const response = await fetch(overpassUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: new URLSearchParams({ data: query })
+    });
+    if(!response.ok){
+      const text = await response.text();
+      throw new Error(`Overpass error ${response.status}: ${text.slice(0, 400)}`);
+    }
+    const data = await response.json();
+    (data.elements || []).forEach(el => {
+      const feature = overpassElementToFeature(el);
+      if(feature) allFeatures.push(feature);
+    });
+  }
+
+  const seen = new Set();
+  const uniqueFeatures = allFeatures.filter(feature => {
+    const key = feature.id;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return {
+    type: 'FeatureCollection',
+    features: uniqueFeatures,
+    meta: {
+      source: 'overpass',
+      count: uniqueFeatures.length,
+      generatedAt: new Date().toISOString()
+    }
+  };
+}
+
+function mockOsmToGeoJson(){
+  const mockData = require('./webapp/data/osm-mock.json');
+  const features = (mockData.elements || [])
+    .map(overpassElementToFeature)
+    .filter(Boolean);
+  return {
+    type: 'FeatureCollection',
+    features,
+    meta: { source: 'mock', count: features.length, message: 'Set USE_MOCK_OSM=false to query Overpass.' }
+  };
+}
+
 app.get('/api/cabins', async (req, res) => {
   try {
     const key = 'cabins_geojson';
     const cached = cacheGet(key);
     if (cached) return res.json(cached);
-
-    // Use local mock data for now
     const data = require('./webapp/data/cabins.json');
     cacheSet(key, data, 5 * 60 * 1000);
     res.json(data);
@@ -116,13 +175,11 @@ app.get('/api/cabins', async (req, res) => {
   }
 });
 
-// Endpoint per ricerca spaziale sui POD/AC: usa lat,lng,distance (m)
 app.get('/api/pod-search', async (req, res) => {
   try {
     const { lat, lng, distance } = req.query;
     if (!lat || !lng) return res.status(400).json({ error: 'Parametri lat e lng obbligatori' });
     const dist = distance || 500;
-
     const params = new URLSearchParams();
     params.set('geometry', `${lng},${lat}`);
     params.set('geometryType', 'esriGeometryPoint');
@@ -131,7 +188,6 @@ app.get('/api/pod-search', async (req, res) => {
     params.set('outFields', '*');
     params.set('f', 'geojson');
     params.set('returnGeometry', 'true');
-
     const target = `${allowedServices.pod_ac_12}/query?${params.toString()}`;
     const response = await fetch(target, { headers: { Accept: 'application/json' } });
     if (!response.ok) return res.status(response.status).send(await response.text());
@@ -142,102 +198,26 @@ app.get('/api/pod-search', async (req, res) => {
   }
 });
 
-// Ottieni area AC per codice specifico (COD_AC)
 app.get('/api/area', async (req, res) => {
   try {
     const code = req.query.code;
     if (!code) return res.status(400).json({ error: 'Parametro code obbligatorio' });
-    
-    // Query GSE feature service for AC by COD_AC
-    const serviceUrl = allowedServices.ac_comuni_21;
-    const queryUrl = `${serviceUrl}/query?where=COD_AC='${encodeURIComponent(code)}'&outFields=*&returnGeometry=true&f=json`;
-    
-    const response = await fetch(queryUrl);
-    if (!response.ok) throw new Error(`GSE service error: ${response.status}`);
-    const data = await response.json();
-    
-    if (data.error) throw new Error(`GSE query error: ${data.error.message}`);
-    if (!data.features || !data.features.length) {
-      return res.status(404).json({ error: `AC con codice ${code} non trovato nel GSE` });
-    }
-    
-    // Convert ArcGIS feature to GeoJSON FeatureCollection
-    const features = data.features.map(feature => ({
-      type: 'Feature',
-      properties: feature.attributes,
-      geometry: feature.geometry
-    }));
-    
-    res.json({
-      type: 'FeatureCollection',
-      features: features
-    });
+    const areasData = require('./webapp/data/areas.json');
+    const data = areasData[code];
+    if (!data) return res.status(404).json({ error: `Area con codice ${code} non trovata` });
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Search OpenStreetMap via Overpass within a polygon (POST with { geojson: <Polygon> })
 app.post('/api/osm-search', async (req, res) => {
   try {
     const geo = req.body && req.body.geojson;
-    if (!geo) return res.status(400).json({ error: 'Body JSON con proprietà geojson obbligatoria' });
-
-    // For now, return mock data to avoid Overpass rate-limiting
-    function geojsonPolygonToOverpassPoly(geojson) {
-      const ring = geojson.type === 'Polygon'
-        ? geojson.coordinates[0]
-        : geojson.geometry.coordinates[0];
-
-      return ring
-        .map(([lon, lat]) => `${lat} ${lon}`)
-        .join(' ');
-    }
-
-    function buildNonResidentialOverpassQuery(poly) {
-      return `
-    [out:json][timeout:60];
-    (
-      nwr["shop"](poly:"${poly}");
-      nwr["craft"](poly:"${poly}");
-      nwr["office"](poly:"${poly}");
-      nwr["tourism"](poly:"${poly}");
-      nwr["amenity"~"school|clinic|hospital|doctors|dentist|pharmacy|post_office|townhall|library|community_centre|restaurant|bar|cafe"](poly:"${poly}");
-      nwr["building"~"commercial|industrial|retail|office|warehouse|supermarket"](poly:"${poly}");
-      nwr["landuse"="industrial"](poly:"${poly}");
-    );
-    out center tags;
-    `;
-    }
-    
-    const poiFeatures = (mockData.elements || []).map(el => {
-      if (el.type === 'node') {
-        return {
-          type: 'Feature',
-          id: el.type + '/' + el.id,
-          properties: Object.assign({ _osm_type: el.type, _osm_id: el.id }, el.tags || {}),
-          geometry: { type: 'Point', coordinates: [el.lon, el.lat] }
-        };
-      } else if ((el.type === 'way' || el.type === 'relation') && el.center) {
-        return {
-          type: 'Feature',
-          id: el.type + '/' + el.id,
-          properties: Object.assign({ _osm_type: el.type, _osm_id: el.id }, el.tags || {}),
-          geometry: { type: 'Point', coordinates: [el.center.lon, el.center.lat] }
-        };
-      }
-      return null;
-    }).filter(Boolean);
-
-    const features = poiFeatures;
-    return res.json({ 
-      type: 'FeatureCollection', 
-      features, 
-      meta: { 
-        mock: true,
-        message: 'Using mock data - connect real Overpass API when ready'
-      } 
-    });
+    if (!geo) return res.status(400).json({ error: 'Body JSON con proprieta geojson obbligatoria' });
+    if(useMockOsm) return res.json(mockOsmToGeoJson());
+    const data = await runOverpassSearch(geo);
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -246,35 +226,23 @@ app.post('/api/osm-search', async (req, res) => {
 app.get('/api/query', async (req, res) => {
   try {
     const { service, ...query } = req.query;
-
     if (!service || !allowedServices[service]) {
       return res.status(400).json({ error: 'Service non consentito. Usa un service whitelisted.' });
     }
-
     const targetUrl = new URL(`${allowedServices[service]}/query`);
     const params = new URLSearchParams();
-
     for (const [key, value] of Object.entries(query)) {
       if (!allowedParams.has(key)) {
         return res.status(400).json({ error: `Parametro non valido: ${key}` });
       }
       params.set(key, value);
     }
-
     if (!params.has('f')) params.set('f', 'geojson');
     if (!params.has('outFields')) params.set('outFields', '*');
     if (!params.has('returnGeometry')) params.set('returnGeometry', 'true');
-
     targetUrl.search = params.toString();
-    const response = await fetch(targetUrl.href, {
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(response.status).send(text);
-    }
-
+    const response = await fetch(targetUrl.href, { headers: { Accept: 'application/json' } });
+    if (!response.ok) return res.status(response.status).send(await response.text());
     const data = await response.json();
     res.json(data);
   } catch (error) {
