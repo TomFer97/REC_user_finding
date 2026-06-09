@@ -16,13 +16,26 @@ const overpassUrls = (
   .map(url => url.trim())
   .filter(Boolean);
 
+const gseFeatureLayerUrls = (
+  process.env.GSE_FEATURE_LAYER_URLS ||
+  process.env.GSE_FEATURE_LAYER_URL ||
+  process.env.GSE_FEATURESERVER_URLS ||
+  process.env.GSE_FEATURESERVER_URL ||
+  'https://services2.arcgis.com/pROHh69WvVijk4nR/arcgis/rest/services/AC_Comuni/FeatureServer/21'
+)
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean);
+
+const defaultGseArcgisLayer = String(process.env.GSE_ARCGIS_LAYER || '21');
+
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 app.use(express.static(path.join(__dirname, 'webapp')));
 
 const allowedServices = {
-  ac_comuni_21: 'https://services.arcgisonline.com/arcgis/rest/services/governance/infrastructure_governance/FeatureServer/21',
-  pod_ac_12: 'https://services.arcgisonline.com/arcgis/rest/services/governance/infrastructure_governance/FeatureServer/12',
+  ac_comuni_21: 'https://services2.arcgis.com/pROHh69WvVijk4nR/arcgis/rest/services/AC_Comuni/FeatureServer/21',
+  pod_ac_12: 'https://mappe.gse.it/srvf/rest/services/TIAD2/POD_AC/FeatureServer/12',
 };
 
 const allowedParams = new Set([
@@ -48,6 +61,13 @@ function cacheGet(key) {
 
 function cacheSet(key, value, ttlMs) {
   cache[key] = { value, expiry: Date.now() + ttlMs };
+}
+
+function normalizeGseLayerUrl(url, serviceLayer = defaultGseArcgisLayer) {
+  const clean = String(url || '').trim().replace(/\/+$/, '');
+  if (!clean) return '';
+  if (/\/(?:FeatureServer|MapServer)\/\d+$/i.test(clean)) return clean;
+  return `${clean}/${serviceLayer}`;
 }
 
 function normalizeGeometry(input) {
@@ -270,6 +290,106 @@ app.get('/api/pod-search', async (req, res) => {
     if (!response.ok) return res.status(response.status).send(await response.text());
 
     res.json(await response.json());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/gse-area', async (req, res) => {
+  try {
+    const objectId = req.query.objectId;
+    const code = req.query.code || 'VAPRIO-GSE-370';
+    const sourceLayer = req.query.layer || '19';
+    const serviceLayer = req.query.serviceLayer || req.query.arcgisLayer || defaultGseArcgisLayer;
+
+    if (!objectId) {
+      return res.status(400).json({ error: 'Parametro objectId obbligatorio' });
+    }
+
+    const errors = [];
+    const tried = new Set();
+
+    for (const candidate of gseFeatureLayerUrls) {
+      const layerUrl = normalizeGseLayerUrl(candidate, serviceLayer);
+      if (!layerUrl || tried.has(layerUrl)) continue;
+      tried.add(layerUrl);
+
+      try {
+        const targetUrl = new URL(`${layerUrl}/query`);
+        targetUrl.search = new URLSearchParams({
+          objectIds: String(objectId),
+          outFields: '*',
+          returnGeometry: 'true',
+          outSR: '4326',
+          f: 'geojson'
+        }).toString();
+
+        const response = await fetch(targetUrl.href, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'Mozilla/5.0 (REC user finding proxy)'
+          }
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          const clean = text
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .slice(0, 220);
+          errors.push(`${layerUrl} -> ${response.status}: ${clean}`);
+          continue;
+        }
+
+        const data = await response.json();
+
+        if (data.error) {
+          errors.push(`${layerUrl} -> ArcGIS error: ${data.error.message || JSON.stringify(data.error)}`);
+          continue;
+        }
+
+        if (!data.features || !data.features.length) {
+          errors.push(`${layerUrl} -> nessuna feature per objectId ${objectId}`);
+          continue;
+        }
+
+        data.features = data.features.map((feature, idx) => {
+          const properties = feature.properties || {};
+          return {
+            type: 'Feature',
+            id: feature.id || properties.OBJECTID || `${code}-${idx}`,
+            geometry: feature.geometry,
+            properties: Object.assign({}, properties, {
+              COD_AC: properties.COD_AC || code,
+              NOME: properties.NOME || properties.RAG_SOC || 'Vaprio d Adda - area GSE ufficiale',
+              COMUNE: properties.COMUNE || 'Vaprio d Adda',
+              SOURCE_REF: `dataSource_3-190075c1b0d-layer-${sourceLayer}:${objectId}`,
+              GSE_SOURCE_LAYER: sourceLayer,
+              GSE_ARCGIS_LAYER: serviceLayer,
+              GSE_OBJECTID: objectId,
+              GSE_FEATURE_LAYER: layerUrl
+            })
+          };
+        });
+
+        data.meta = Object.assign({}, data.meta || {}, {
+          source: 'gse',
+          featureLayer: layerUrl,
+          sourceLayer,
+          arcgisLayer: serviceLayer,
+          objectId: String(objectId)
+        });
+
+        return res.json(data);
+      } catch (err) {
+        errors.push(`${layerUrl} -> ${err.message}`);
+      }
+    }
+
+    return res.status(502).json({
+      error: 'Geometria GSE non caricata. Endpoint/layer/objectId da verificare.',
+      details: errors
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

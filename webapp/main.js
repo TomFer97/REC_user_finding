@@ -9,8 +9,8 @@ const officialGseArea = {
   code: 'VAPRIO-GSE-370',
   label: 'Vaprio d Adda - area GSE ufficiale',
   layer: 19,
+  arcgisLayer: 21,
   objectId: 370,
-  serviceBase: 'https://services.arcgisonline.com/arcgis/rest/services/governance/infrastructure_governance/FeatureServer',
   sourceRef: 'dataSource_3-190075c1b0d-layer-19:370'
 };
 
@@ -29,7 +29,12 @@ async function fetchJson(url, options){
     let message = response.status + ' ' + response.statusText;
     try{
       const body = await response.json();
-      if(body && body.error) message = body.error;
+      if(body && body.error){
+        message = body.error;
+        if(Array.isArray(body.details) && body.details.length){
+          message += ': ' + body.details.join(' | ');
+        }
+      }
     }catch(e){
       try{ message = await response.text(); }catch(e2){}
     }
@@ -58,30 +63,18 @@ function loadCabins(){
 
 async function fetchOfficialGseArea(){
   const query = new URLSearchParams({
-    objectIds: String(officialGseArea.objectId),
-    outFields: '*',
-    returnGeometry: 'true',
-    outSR: '4326',
-    f: 'geojson'
+    code: officialGseArea.code,
+    layer: String(officialGseArea.layer),
+    serviceLayer: String(officialGseArea.arcgisLayer),
+    objectId: String(officialGseArea.objectId)
   }).toString();
-  const url = officialGseArea.serviceBase + '/' + officialGseArea.layer + '/query?' + query;
-  const data = await fetchJson(url);
+
+  const data = await fetchJson('/api/gse-area?' + query);
+
   if(!data.features || !data.features.length){
     throw new Error('Nessuna geometria GSE trovata per ' + officialGseArea.sourceRef);
   }
-  data.features = data.features.map((feature, idx) => ({
-    type: 'Feature',
-    id: feature.id || officialGseArea.code + '-' + idx,
-    geometry: feature.geometry,
-    properties: Object.assign({}, feature.properties || {}, {
-      COD_AC: officialGseArea.code,
-      NOME: officialGseArea.label,
-      COMUNE: 'Vaprio d Adda',
-      SOURCE_REF: officialGseArea.sourceRef,
-      GSE_LAYER: officialGseArea.layer,
-      GSE_OBJECTID: officialGseArea.objectId
-    })
-  }));
+
   return data;
 }
 
