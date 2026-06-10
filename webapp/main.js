@@ -235,22 +235,42 @@ function populateLongList(features){
   });
 }
 
-function getSelectedColumns(){
-  const preset = document.getElementById('exportPreset')?.value || 'outreach';
-  if(preset === 'minimal') return ['cabina_cod_ac','outreach_name','priorita_outreach','building_area_m2','category_macro','category_sub','address','lat','lon','_osm_type','_osm_id'];
-  if(preset === 'all'){
-    const inputs = Array.from(document.querySelectorAll('#columnsSelector input[type=checkbox]'));
-    const cols = inputs.filter(i=>i.checked).map(i=>i.dataset.col);
-    return cols.length ? cols : ['cabina_cod_ac','outreach_name','priorita_outreach','category_macro','category_sub'];
-  }
-  return ['cabina_cod_ac','outreach_name','priorita_outreach','building_area_m2','building_area_source','building_match_distance_m','category_macro','category_sub','address','phone','contact:phone','email','website','lat','lon','confidence','note_verifica','source','_osm_type','_osm_id','building_osm_type','building_osm_id'];
+function firstValue(...values){
+  return values.find(value => value !== undefined && value !== null && String(value).trim() !== '') || '';
+}
+
+function osmReference(p){
+  if(!p._osm_type || !p._osm_id) return '';
+  return p._osm_type + '/' + p._osm_id;
+}
+
+function exportRows(){
+  return osmResults.map(feature => {
+    const p = feature.properties || {};
+    return {
+      Nome: p.outreach_name || '',
+      Priorita: p.priorita_outreach || '',
+      Superficie_mq: p.building_area_m2 || '',
+      Categoria: [p.category_macro, p.category_sub].filter(Boolean).join(' / '),
+      Indirizzo: p.address || '',
+      Telefono: firstValue(p.phone, p['contact:phone']),
+      Email: firstValue(p.email, p['contact:email']),
+      Sito: firstValue(p.website, p.url, p['contact:website']),
+      Latitudine: p.lat || '',
+      Longitudine: p.lon || '',
+      Confidenza: p.confidence || '',
+      Note: p.note_verifica || '',
+      OSM: osmReference(p)
+    };
+  });
 }
 
 function exportCSV(){
   if(!osmResults.length){ alert('Nessun risultato da esportare'); return; }
-  const cols = getSelectedColumns();
-  const rows = osmResults.map(f => cols.map(c => csvCell((f.properties || {})[c])).join(';'));
-  const csv = [cols.join(';'), ...rows].join('\n');
+  const rows = exportRows();
+  const headers = Object.keys(rows[0]);
+  const csvRows = rows.map(row => headers.map(header => csvCell(row[header])).join(';'));
+  const csv = '\ufeff' + [headers.join(';'), ...csvRows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -270,13 +290,30 @@ function csvCell(value){
 async function exportPDF(){
   if(!osmResults.length){ alert('Nessun risultato da esportare'); return; }
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-  const body = osmResults.map(f => {
-    const p = f.properties || {};
-    return [p.cabina_cod_ac, p.outreach_name, p.priorita_outreach, formatBuildingArea(p.building_area_m2), p.category_macro, p.category_sub, p.address, p.confidence];
-  });
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+  const body = exportRows().map(row => [
+    row.Nome,
+    row.Priorita,
+    row.Superficie_mq ? formatBuildingArea(row.Superficie_mq) : '',
+    row.Categoria,
+    row.Indirizzo,
+    row.Telefono,
+    row.Sito
+  ]);
   doc.text('Potenziali utenze non domestiche - Vaprio d Adda', 40, 40);
-  doc.autoTable({ head: [['Cabina','Nome','Priorita','Superficie','Macro categoria','Sotto-categoria','Indirizzo','Confidenza']], body, startY: 60, styles: { fontSize: 8 } });
+  doc.autoTable({
+    head: [['Nome','Priorita','Superficie','Categoria','Indirizzo','Telefono','Sito']],
+    body,
+    startY: 60,
+    styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+    headStyles: { fillColor: [26, 115, 232] },
+    columnStyles: {
+      0: { cellWidth: 120 },
+      3: { cellWidth: 130 },
+      4: { cellWidth: 160 },
+      6: { cellWidth: 120 }
+    }
+  });
   doc.save('vaprio_potenziali_utenti_' + (selectedCabinCode || 'export') + '.pdf');
 }
 

@@ -22,33 +22,10 @@
 
     <section class="panel">
       <h2>Export</h2>
+      <p class="hint">Scarica una lista pronta per verifica e contatto, con le colonne essenziali.</p>
       <div class="controls-row">
-        <select id="exportPreset">
-          <option value="outreach" selected>Outreach CER</option>
-          <option value="minimal">Minimal</option>
-          <option value="all">Colonne personalizzate</option>
-        </select>
-        <button id="exportCsvBtn">CSV</button>
-        <button id="exportPdfBtn">PDF</button>
-      </div>
-      <div id="columnsSelector">
-        <label><input type="checkbox" data-col="cabina_cod_ac" checked> Cabina</label>
-        <label><input type="checkbox" data-col="outreach_name" checked> Nome</label>
-        <label><input type="checkbox" data-col="category_macro" checked> Categoria</label>
-        <label><input type="checkbox" data-col="category_sub" checked> Sotto-categoria</label>
-        <label><input type="checkbox" data-col="address" checked> Indirizzo</label>
-        <label><input type="checkbox" data-col="building_area_m2" checked> Superficie</label>
-        <label><input type="checkbox" data-col="phone"> Telefono</label>
-        <label><input type="checkbox" data-col="website"> Sito</label>
-        <label><input type="checkbox" data-col="email"> Email</label>
-        <label><input type="checkbox" data-col="lat" checked> Lat</label>
-        <label><input type="checkbox" data-col="lon" checked> Lon</label>
-        <label><input type="checkbox" data-col="confidence" checked> Confidenza</label>
-        <label><input type="checkbox" data-col="note_verifica"> Note</label>
-        <label><input type="checkbox" data-col="building_area_source"> Fonte superficie</label>
-        <label><input type="checkbox" data-col="building_osm_id"> OSM edificio</label>
-        <label><input type="checkbox" data-col="_osm_type"> OSM type</label>
-        <label><input type="checkbox" data-col="_osm_id"> OSM ID</label>
+        <button id="exportCsvBtn">Scarica CSV</button>
+        <button id="exportPdfBtn">Scarica PDF</button>
       </div>
     </section>
 
