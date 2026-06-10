@@ -31,7 +31,7 @@ http://localhost:3000
 npm test
 ```
 
-Il test attuale controlla la sintassi di `server.js`.
+Il test controlla la sintassi del backend e del JavaScript frontend principale.
 
 ## Modalita mock
 
@@ -52,14 +52,14 @@ Di default l'app prova a usare Overpass reale.
 
 ## Export
 
-Il CSV include colonne pensate per outreach CER:
+L'export usa un set fisso di colonne pensate per outreach CER, cosi resta semplice da usare e stabile tra CSV e PDF:
 
-- cabina/area;
 - nome target;
+- priorita;
+- superficie edificio stimata;
 - categoria macro e sotto-categoria;
 - indirizzo se disponibile;
 - telefono, sito, email se disponibili in OSM;
-- superficie edificio stimata, fonte del match e ID OSM dell'edificio quando disponibili;
 - coordinate;
 - livello di confidenza;
 - note di verifica.
