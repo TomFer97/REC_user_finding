@@ -5,14 +5,32 @@ let selectedLayer, resultsLayer;
 let osmResults = [];
 let selectedCabinCode = '';
 
-const officialGseArea = {
-  code: 'VAPRIO-GSE-370',
-  label: 'Vaprio d Adda - area GSE ufficiale',
-  layer: 19,
-  arcgisLayer: 21,
-  objectId: 370,
-  sourceRef: 'dataSource_3-190075c1b0d-layer-19:370'
-};
+const officialGseAreas = [
+  {
+    code: 'AC001E01364',
+    label: 'Vaprioenergy area GSE 1 - AC001E01364',
+    layer: 19,
+    arcgisLayer: 21,
+    objectId: 336,
+    sourceRef: 'dataSource_3-190075c1b0d-layer-19:336'
+  },
+  {
+    code: 'AC001E01397',
+    label: 'Vaprioenergy area GSE 2 - AC001E01397',
+    layer: 19,
+    arcgisLayer: 21,
+    objectId: 369,
+    sourceRef: 'dataSource_3-190075c1b0d-layer-19:369'
+  },
+  {
+    code: 'AC001E01398',
+    label: 'Vaprioenergy area GSE 3 - AC001E01398',
+    layer: 19,
+    arcgisLayer: 21,
+    objectId: 370,
+    sourceRef: 'dataSource_3-190075c1b0d-layer-19:370'
+  }
+];
 
 function setInfo(message){
   const el = document.getElementById('info');
@@ -47,40 +65,42 @@ function loadCabins(){
   const ul = document.getElementById('cabinsList');
   if(ul){
     ul.innerHTML = '';
-    const li = document.createElement('li');
-    li.textContent = officialGseArea.label;
-    li.dataset.code = officialGseArea.code;
-    li.onclick = () => selectOfficialGseArea(li);
-    ul.appendChild(li);
+    officialGseAreas.forEach(area => {
+      const li = document.createElement('li');
+      li.textContent = area.label;
+      li.dataset.code = area.code;
+      li.onclick = () => selectOfficialGseArea(area, li);
+      ul.appendChild(li);
+    });
   }
-  setInfo('Seleziona area ufficiale GSE per avviare la ricerca.');
+  setInfo('Seleziona una delle tre aree ufficiali GSE Vaprioenergy per avviare la ricerca.');
 }
 
-async function fetchOfficialGseArea(){
+async function fetchOfficialGseArea(area){
   const query = new URLSearchParams({
-    code: officialGseArea.code,
-    layer: String(officialGseArea.layer),
-    serviceLayer: String(officialGseArea.arcgisLayer),
-    objectId: String(officialGseArea.objectId)
+    code: area.code,
+    layer: String(area.layer),
+    serviceLayer: String(area.arcgisLayer),
+    objectId: String(area.objectId)
   }).toString();
 
   const data = await fetchJson('/api/gse-area?' + query);
 
   if(!data.features || !data.features.length){
-    throw new Error('Nessuna geometria GSE trovata per ' + officialGseArea.sourceRef);
+    throw new Error('Nessuna geometria GSE trovata per ' + area.sourceRef);
   }
 
   return data;
 }
 
-async function selectOfficialGseArea(trigger){
+async function selectOfficialGseArea(area, trigger){
   try{
-    selectedCabinCode = officialGseArea.code;
+    selectedCabinCode = area.code;
     document.querySelectorAll('#cabinsList li').forEach(n=>n.classList.remove('active'));
     if(trigger) trigger.classList.add('active');
-    setInfo('Caricamento geometria ufficiale GSE (' + officialGseArea.sourceRef + ')...');
+    setInfo('Caricamento geometria ufficiale GSE (' + area.sourceRef + ')...');
 
-    const geo = await fetchOfficialGseArea();
+    const geo = await fetchOfficialGseArea(area);
     const feature = geo.features && geo.features[0];
     if(!feature) throw new Error('Area GSE non trovata');
 
@@ -94,7 +114,7 @@ async function selectOfficialGseArea(trigger){
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ geojson: feature.geometry })
     });
-    osmResults = enrichFeatures(osm.features || [], officialGseArea.code);
+    osmResults = enrichFeatures(osm.features || [], area.code);
     renderResults(osmResults, osm.meta || {});
   }catch(err){
     setInfo('Errore: ' + err.message);

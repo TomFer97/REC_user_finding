@@ -4,13 +4,14 @@ Webapp preliminare per supportare Vaprioenergy nell'identificazione di potenzial
 
 L'app consente di:
 
-- selezionare l'area ufficiale GSE di riferimento per Vaprio d Adda;
+- selezionare una delle tre aree ufficiali GSE di riferimento per Vaprioenergy;
 - interrogare OpenStreetMap tramite Overpass per trovare potenziali utenze non domestiche;
 - classificare i risultati per macro-categoria utile all'outreach;
 - stimare la superficie dell'edificio quando OSM fornisce una geometria o un edificio associabile;
 - esportare una lista CSV/PDF per le successive verifiche manuali.
 
-> Nota: l'area GSE viene caricata tramite il proxy backend `/api/gse-area`, usando il layer ArcGIS reale `AC_Comuni/FeatureServer/21`.
+> Nota: le aree GSE vengono caricate tramite il proxy backend `/api/gse-area`, usando il layer ArcGIS reale `AC_Comuni/FeatureServer/21`.
+> Le tre aree configurate sono `AC001E01364`, `AC001E01397` e `AC001E01398`.
 
 ## Esecuzione locale
 
@@ -45,7 +46,7 @@ Di default l'app prova a usare Overpass reale.
 
 ## Dati principali
 
-- `/api/gse-area`: proxy backend per la geometria ufficiale GSE.
+- `/api/gse-area`: proxy backend per le geometrie ufficiali GSE.
 - `/api/osm-search`: ricerca Overpass su target non domestici e geometrie edificio.
 - `webapp/data/cabins.json` e `webapp/data/areas.json`: dati legacy non usati dalla UI principale.
 - `webapp/data/osm-mock.json`: dati demo usati solo con `USE_MOCK_OSM=true`.
